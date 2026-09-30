@@ -1,0 +1,50 @@
+import {test,expect} from '@playwright/test';
+import {setupAccount} from './helpers';
+test.beforeEach(async({page})=>setupAccount(page));
+
+test('register, edit, postpone, complete and delete a recurring chore',async({page})=>{
+  const failures=[];
+  page.on('pageerror',error=>failures.push(error.message));
+  await page.setViewportSize({width:1440,height:1040});
+  await page.goto('/');
+  await expect(page.getByRole('heading',{name:'오늘도, 기분 좋은 우리 집'})).toBeVisible();
+  await page.getByRole('button',{name:'집안일 추가',exact:true}).first().click();
+  const name='테스트 욕실 청소 '+Date.now();
+  await page.getByLabel('집안일 이름').fill(name);
+  await page.getByLabel('반복 주기 (일)').fill('3');
+  await page.getByLabel('작업 유형').selectOption('bathroom');
+  await page.getByRole('button',{name:'저장',exact:true}).click();
+  await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
+  await page.getByRole('button',{name:name+' 수정',exact:true}).click();
+  await page.getByLabel('반복 주기 (일)').fill('4');
+  await page.getByRole('button',{name:'저장',exact:true}).click();
+  await expect(page.locator('.task-info').filter({hasText:name})).toContainText('4일마다');
+  await page.screenshot({path:'../../work/cleancycle-desktop.png',fullPage:true});
+  await page.getByRole('button',{name:name+' 하루 미루기',exact:true}).click();
+  await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'모든 집안일',exact:true}).click();
+  await page.getByRole('button',{name:name+' 완료',exact:true}).click();
+  await expect(page.getByRole('status')).toContainText('완료했어요');
+  await page.reload();
+  await page.getByRole('button',{name:'생활 리포트',exact:true}).first().click();
+  await expect(page.locator('.history')).toContainText(name);
+  await page.getByRole('button',{name:'모든 집안일',exact:true}).click();
+  await page.getByRole('button',{name:name+' 삭제',exact:true}).click();
+  await page.getByRole('button',{name:'삭제',exact:true}).click();
+  await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
+  expect(failures).toEqual([]);
+});
+
+test('mobile layout and modal remain usable',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('/');
+  await expect(page.getByRole('heading',{name:'오늘도, 기분 좋은 우리 집'})).toBeVisible();
+  await page.screenshot({path:'../../work/cleancycle-mobile.png',fullPage:true});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.getByRole('button',{name:'집안일 추가',exact:true}).first().click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByLabel('집안일 이름').fill('매우 긴 집안일 이름도 정상적으로 입력되는지 확인');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});

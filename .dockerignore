@@ -1,0 +1,12 @@
+**/node_modules
+**/.venv
+**/dist
+**/.env*
+**/*.sqlite3*
+**/legacy-claim-code.txt
+**/__pycache__
+**/.pytest_cache
+**/test-results
+**/tests
+**/*.log
+.git

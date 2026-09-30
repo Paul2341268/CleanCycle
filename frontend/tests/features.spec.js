@@ -1,0 +1,34 @@
+import {test,expect} from '@playwright/test';
+import {setupAccount} from './helpers';
+test.beforeEach(async({page})=>setupAccount(page));
+
+test('recommendation, postpone report, completion and undo',async({page})=>{
+  const name='기능 검증 '+Date.now();
+  await page.goto('/');
+  await page.getByRole('button',{name:'집안일 추가',exact:true}).first().click();
+  await page.getByLabel('집안일 이름').fill(name);
+  await page.getByRole('button',{name:'저장',exact:true}).click();
+  await page.getByRole('button',{name:name+' 추천 근거',exact:true}).click();
+  await expect(page.getByRole('dialog')).toContainText('CleanCycle의 자체 규칙');
+  await expect(page.locator('.evidence-list')).toContainText('등록된 예정일');
+  await page.screenshot({path:'../../work/feature-detail.png'});
+  await page.getByRole('button',{name:'닫기',exact:true}).click();
+  await page.getByRole('button',{name:name+' 하루 미루기',exact:true}).click();
+  await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'생활 리포트',exact:true}).first().click();
+  await expect(page.locator('.postpone-ranking')).toContainText(name);
+  await page.getByRole('button',{name:'모든 집안일',exact:true}).click();
+  await page.getByRole('button',{name:name+' 완료',exact:true}).click();
+  await page.getByRole('button',{name:name+' 완료 취소',exact:true}).click();
+  await page.getByRole('button',{name:'완료 취소',exact:true}).click();
+  await expect(page.getByRole('status')).toContainText('이전 예정일을 복구');
+  await page.reload();
+  await page.getByRole('button',{name:'생활 리포트',exact:true}).first().click();
+  await expect(page.locator('.history').getByText(name,{exact:true})).toHaveCount(0);
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:'../../work/feature-report-mobile.png',fullPage:true});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+  await page.getByRole('button',{name:'모든 집안일',exact:true}).click();
+  await page.getByRole('button',{name:name+' 삭제',exact:true}).click();
+  await page.getByRole('button',{name:'삭제',exact:true}).click();
+});
