@@ -4,7 +4,6 @@ import httpx
 import pytest
 
 from app import air_quality as air
-from app.main import recommendation, today
 from test_app import client
 
 
@@ -23,7 +22,7 @@ def test_missing_values_and_stale_measurements():
         air.parse_air([],'연산동',now)
 
 
-def test_air_success_cache_and_recommendation(client,monkeypatch):
+def test_air_success_and_cache(client,monkeypatch):
     monkeypatch.setenv('AIRKOREA_SERVICE_KEY','fake-air-key')
     air.cache.clear()
     calls=[]
@@ -32,13 +31,10 @@ def test_air_success_cache_and_recommendation(client,monkeypatch):
         return httpx.Response(200,request=httpx.Request('GET','https://example.test'),json={
             'response':{'header':{'resultCode':'00'},'body':{'items':[reading(datetime.now(air.KST),pm25Value='55',pm25Grade1h='3')]}}})
     monkeypatch.setattr(httpx.AsyncClient,'get',success)
-    result=client.get('/api/dashboard').json()['air_quality']
+    result=client.get('/api/environment').json()['air_quality']
     assert result['status']=='ok' and result['pm25']==55
-    assert client.get('/api/dashboard').json()['air_quality']==result
+    assert client.get('/api/environment').json()['air_quality']==result
     assert len(calls)==1 and calls[0]['sidoName']=='부산'
-    task={'due_date':today().isoformat(),'kind':'outdoor'}
-    assert recommendation(task,{},result)['score']==-3
-    assert recommendation(task,{},{**result,'status':'stale'})['score']==0
 
 
 def test_air_error_does_not_leak_key(client,monkeypatch):
@@ -46,6 +42,6 @@ def test_air_error_does_not_leak_key(client,monkeypatch):
     async def failure(*args,**kwargs):
         raise httpx.ConnectError('secret-error-key')
     monkeypatch.setattr(httpx.AsyncClient,'get',failure)
-    result=client.get('/api/dashboard')
+    result=client.get('/api/environment')
     assert result.json()['air_quality']['status']=='error'
     assert 'secret-error-key' not in result.text

@@ -22,7 +22,7 @@ $pythonCandidates = @(
     (Join-Path (Split-Path $projectDir) '.venv\Scripts\python.exe')
 )
 $pythonExe = $pythonCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (!$pythonExe) { throw 'Run Setup-Windows.ps1 first to install the app dependencies.' }
+if (!$pythonExe) { throw 'Run setup.ps1 first to install the app dependencies.' }
 if (!(Test-Path (Join-Path $projectDir 'frontend\dist\index.html'))) { throw 'Build the frontend before starting a presentation.' }
 if (Get-NetTCPConnection -LocalPort 8770 -State Listen -ErrorAction SilentlyContinue) { throw 'Port 8770 is already in use.' }
 
@@ -51,8 +51,6 @@ try {
         Start-Sleep -Seconds 1
     }
     if (!$url) { throw 'A public URL could not be obtained. Check your network connection.' }
-    $env:PUBLIC_ORIGIN = $url
-    $env:COOKIE_SECURE = '1'
     $server = Start-Process -FilePath $pythonExe -ArgumentList '-m','uvicorn','app.main:app','--host','127.0.0.1','--port','8770','--proxy-headers','--forwarded-allow-ips','127.0.0.1' -WorkingDirectory (Join-Path $projectDir 'backend') -WindowStyle Hidden -RedirectStandardError (Join-Path $runtimeDir 'server.log') -RedirectStandardOutput (Join-Path $runtimeDir 'server-output.log') -PassThru
     $ready = $false
     for ($attempt = 0; $attempt -lt 20; $attempt++) {
@@ -72,7 +70,4 @@ try {
     if ($server -and !$server.HasExited) { Stop-Process -Id $server.Id -ErrorAction SilentlyContinue }
     if (!$tunnel.HasExited) { Stop-Process -Id $tunnel.Id -ErrorAction SilentlyContinue }
     throw
-} finally {
-    Remove-Item Env:PUBLIC_ORIGIN -ErrorAction SilentlyContinue
-    Remove-Item Env:COOKIE_SECURE -ErrorAction SilentlyContinue
 }

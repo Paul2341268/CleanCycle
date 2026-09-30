@@ -1,4 +1,4 @@
-# Free classroom demo. Local SQLite resets when Render restarts or sleeps.
+# Personal classroom app. Records stay in the visitor's browser.
 services:
   - type: web
     name: cleancycle
@@ -8,10 +8,6 @@ services:
     dockerContext: .
     healthCheckPath: /api/health
     envVars:
-      - key: CLEANCYCLE_DB
-        value: /var/data/cleancycle.sqlite3
-      - key: COOKIE_SECURE
-        value: "1"
       - key: KMA_SERVICE_KEY
         sync: false
       - key: AIRKOREA_SERVICE_KEY
