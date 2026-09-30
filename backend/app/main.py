@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, field_validator
 from .weather import KST, REGIONS, get_weather
 from .air_quality import get_air_quality
 from .accounts import Accounts
+from . import planner, waste
 
 DB = Path(os.environ.get("CLEANCYCLE_DB", Path(__file__).resolve().parents[1] / "cleancycle.sqlite3"))
 
@@ -60,26 +61,31 @@ async def lifespan(app):
                 if name not in existing:
                     conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
         accounts.initialize(conn, DB)
+        planner.initialize(conn)
+        waste.initialize(conn)
     yield
 
 
 app = FastAPI(title="CleanCycle", lifespan=lifespan)
 accounts = Accounts(database)
 app.include_router(accounts.router)
+app.include_router(planner.router(database, accounts, today))
+app.include_router(waste.router(database, accounts, today))
 
 
 @app.middleware('http')
 async def request_security(request: Request, call_next):
     if request.url.path.startswith('/api/') and request.method not in ('GET','HEAD','OPTIONS'):
         origin = request.headers.get('origin')
-        expected = os.environ.get('PUBLIC_ORIGIN', str(request.base_url).rstrip('/'))
+        expected = (os.environ.get('PUBLIC_ORIGIN') or os.environ.get('RENDER_EXTERNAL_URL') or str(request.base_url)).rstrip('/')
         allowed = {expected}
         if os.environ.get('COOKIE_SECURE')!='1':
             allowed.update({'http://127.0.0.1:5173','http://localhost:5173'})
         if request.headers.get('x-cleancycle-request')!='1' or (origin and origin not in allowed):
             return JSONResponse(status_code=403,content={'detail':'요청 출처를 확인할 수 없습니다.'})
         try:
-            if int(request.headers.get('content-length','0'))>16384:
+            limit=410000 if request.url.path.endswith('/photo') else 16384
+            if int(request.headers.get('content-length','0'))>limit:
                 return JSONResponse(status_code=413,content={'detail':'요청이 너무 큽니다.'})
         except ValueError:
             return JSONResponse(status_code=400,content={'detail':'요청 형식이 잘못되었습니다.'})
@@ -98,7 +104,7 @@ def health():
 
 
 def capture_due(conn, home_id):
-    conn.execute("INSERT OR IGNORE INTO daily_tasks(day,task_id,home_id) SELECT ?,id,home_id FROM tasks WHERE home_id=? AND due_date<=?",
+    conn.execute("INSERT OR IGNORE INTO daily_tasks(day,task_id,home_id,room) SELECT ?,id,home_id,room FROM tasks WHERE home_id=? AND due_date<=?",
                  (today().isoformat(), home_id, today().isoformat()))
 
 
@@ -116,7 +122,7 @@ class TaskInput(BaseModel):
     room: Literal["욕실", "주방", "침실", "거실", "기타"]
     interval_days: int = Field(ge=1, le=365)
     due_date: date
-    kind: Literal["general", "bathroom", "laundry", "outdoor"] = "general"
+    kind: Literal["general", "bathroom", "laundry", "outdoor", "filter", "ventilation", "recycling", "food_waste", "trash"] = "general"
     assigned_to: int | None = None
     revision: int | None = None
 
@@ -165,6 +171,13 @@ def recommendation(task, weather, air=None):
             evidence.append({"label": reasons[-1], "points": -3, "source": "한국환경공단 에어코리아",
                              "value": f"{air.get('station', '지역')} 측정소 · PM10 {air.get('pm10')} / PM2.5 {air.get('pm25')} µg/m³",
                              "time": air.get('measured_at')})
+    if air and air.get('status')=='ok' and any((air.get(f+'_grade') or 0)>=3 for f in ('pm10','pm25')):
+        if task['kind'] in ('filter','ventilation'):
+            points=3 if task['kind']=='filter' else -3
+            reason='미세먼지 나쁨 이상 · 필터 상태 확인' if points>0 else '미세먼지 나쁨 이상 · 환기 시점 확인'
+            score+=points
+            reasons.append(reason)
+            evidence.append({'label':reason,'points':points,'source':'한국환경공단 에어코리아','value':air.get('station'),'time':air.get('measured_at')})
     return {**task, "score": score, "reasons": reasons, "evidence": evidence, "overdue_days": max(0, delay)}
 
 
@@ -183,7 +196,8 @@ async def dashboard(region: str | None = None, ctx=Depends(accounts.context)):
         accounts.check_membership(conn,ctx)
         capture_due(conn,ctx['home_id'])
         summary = daily_summary(conn,ctx['home_id'])
-        tasks = [recommendation(dict(row), weather, air) for row in conn.execute("SELECT * FROM tasks WHERE home_id=?",(ctx['home_id'],))]
+        waste_data = waste.schedule(conn, ctx['home_id'], today())
+        tasks = [waste.add_evidence(recommendation(dict(row), weather, air), waste_data) for row in conn.execute("SELECT * FROM tasks WHERE home_id=?",(ctx['home_id'],))]
         logs = [dict(row) for row in conn.execute("""SELECT l.*,u.name AS completed_by_name,a.name AS assignee_name FROM logs l
                  LEFT JOIN users u ON u.id=l.completed_by LEFT JOIN users a ON a.id=l.assignee_at_completion
                  WHERE l.home_id=? AND l.undone_at IS NULL ORDER BY l.completed_at DESC,l.id DESC LIMIT 500""",(ctx['home_id'],))]
@@ -200,7 +214,7 @@ async def dashboard(region: str | None = None, ctx=Depends(accounts.context)):
             WHERE p.home_id=? AND substr(p.postponed_at,1,10) BETWEEN ? AND ? ORDER BY p.postponed_at DESC,p.id DESC""", (ctx['home_id'],week_start,today().isoformat()))]
     return {"tasks": sorted(tasks, key=lambda t: (-t["score"], t["id"])), "logs": logs,
             "weather": weather, "air_quality": air, "today": today().isoformat(), "daily_summary": summary,
-            "postponements": postponed}
+            "postponements": postponed, "waste": waste_data}
 
 
 @app.post("/api/tasks", status_code=201)

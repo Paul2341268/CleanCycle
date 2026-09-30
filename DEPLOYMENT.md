@@ -1,6 +1,26 @@
 # CleanCycle 배포 준비
 
-현재는 배포 준비 상태이며 공개 서버는 생성하지 않았습니다. 계정, 서비스 선택 및 유료 요금 동의 후 배포할 수 있습니다.
+학교 발표용 무료 배포를 기준으로 합니다. `127.0.0.1`은 실행 중인 PC 전용 주소이고 GitHub는 소스 저장소입니다. 다른 컴퓨터에서는 Render 배포 후 발급되는 HTTPS 주소로 접속합니다.
+
+## 학교 발표용 무료 Render
+
+1. Render에 GitHub 계정으로 로그인하고 New → Web Service를 선택합니다.
+2. Public Git Repository에 `https://github.com/Paul2341268/CleanCycle`을 연결합니다.
+3. Docker, main 브랜치, Free 인스턴스를 선택합니다. Root Directory는 비워 둡니다.
+4. `COOKIE_SECURE=1`을 설정합니다. 기상청·에어코리아 키는 서버 환경변수 또는 `/etc/secrets/.env` 비밀 파일에 입력합니다. 비밀 파일 사용 시 `CLEANCYCLE_ENV_FILE=/etc/secrets/.env`를 설정합니다.
+5. Deploy Web Service 후 `https://서비스이름.onrender.com` 주소를 사용합니다. 앱은 Render가 제공하는 `RENDER_EXTERNAL_URL`을 로그인 요청 출처로 자동 인식합니다.
+
+무료 서비스는 15분 동안 요청이 없으면 잠들고 다시 접속할 때 약 1분 기다릴 수 있습니다. **발표 전에 접속해 로그인과 시연 데이터를 준비합니다. SQLite 기록은 서버 재시작·휴면·재배포 시 초기화됩니다.** 발표 중 같은 실행 세션에서는 구성원이 공유할 수 있습니다. 기존 PC의 계정·데이터는 자동 이전하지 않습니다. 수업 시연에는 무료 설정으로 시작하고 데이터 영구 보관이 필요할 때만 별도 저장소를 검토합니다.
+
+## 현재 PC를 이용한 임시 시연 링크
+
+Windows에서 `Start-Presentation.ps1`을 실행하면 무료 Cloudflare 임시 HTTPS 링크를 발급합니다. 기존 앱 데이터와 API 설정을 사용합니다. 링크를 사용하는 동안 이 PC가 켜져 있고 인터넷에 연결되어 있어야 합니다. `Stop-Presentation.ps1`로 종료하며 다시 시작하면 주소가 바뀝니다. 이는 고정 서버 배포를 대신하지 않는 보조 시연 방법입니다.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-Presentation.ps1
+```
+
+공식 안내: [Render 무료 서비스](https://render.com/docs/free), [Cloudflare 임시 터널](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
 
 ## 구성과 제약
 
@@ -29,7 +49,7 @@ Linux 호스트 디렉터리를 직접 마운트한다면 UID 10001 사용자가
 
 공식 안내: [영구 디스크](https://render.com/docs/disks), [Docker 배포](https://render.com/docs/docker), [Blueprint 형식](https://render.com/docs/blueprint-spec).
 
-Render 영구 디스크는 유료입니다. `render.yaml`은 starter + 1GB disk 예시이며 비용 확인과 사용자 동의 후에만 적용합니다. 디스크를 사용하면 단일 인스턴스이며 배포 중 짧은 중단이 있을 수 있습니다.
+`render.yaml`은 Free 발표용 예시입니다. 아래 영구 디스크 구성은 장기 데이터 보관을 위한 선택 사항이며 기본 무료 배포에는 적용하지 않습니다. Render 영구 디스크는 유료입니다.
 
 1. 계정과 비공개 Git 저장소를 준비합니다. 저장소 루트가 `cleancycle`이 되도록 프로젝트를 올리고 API 키·DB를 제외합니다.
 2. Docker Web Service를 만들거나 루트의 `render.yaml`을 Blueprint로 적용합니다. 상위 저장소 구조를 유지하면 Root Directory를 `cleancycle`로 지정하고 경로 설정도 맞춥니다.

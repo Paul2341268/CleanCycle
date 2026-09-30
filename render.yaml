@@ -1,25 +1,18 @@
-# Persistent disks require a paid plan. This file does not provision anything by itself.
+# Free classroom demo. Local SQLite resets when Render restarts or sleeps.
 services:
   - type: web
     name: cleancycle
     runtime: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /api/health
-    disk:
-      name: cleancycle-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: CLEANCYCLE_DB
         value: /var/data/cleancycle.sqlite3
       - key: COOKIE_SECURE
         value: "1"
-      - key: PUBLIC_ORIGIN
-        sync: false
       - key: KMA_SERVICE_KEY
         sync: false
       - key: AIRKOREA_SERVICE_KEY
         sync: false
-

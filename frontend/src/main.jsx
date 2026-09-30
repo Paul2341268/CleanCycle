@@ -5,6 +5,7 @@ import './style.css';
 import {UndoButton, RecommendationDetails, PostponementReport} from './features';
 import {api} from './api';
 import {AccountGate,HouseholdSettings,Logout,SharingReport} from './accounts';
+import {WasteSettings} from './waste';
 
 const roomIcons = {'욕실': Bath, '주방': CookingPot, '침실': BedDouble, '거실': Sofa, '기타': House};
 const rooms = Object.keys(roomIcons);
@@ -99,6 +100,7 @@ function App({account,onAccountChange}) {
         <AirQuality air={data?.air_quality} region={region} loading={loading} onRefresh={load}/>
         <section className="insight"><span className="insight-label"><Sparkles size={16}/>오늘의 한마디</span><h2>{weatherReady&&weather.rain_probability>=60?'비 소식이 있는 날이에요':weatherReady&&weather.humidity>=75?'물기까지 가볍게 정리해요':'작은 루틴이 만드는 변화'}</h2><p>{weatherReady&&weather.rain_probability>=60?'야외 작업이나 자연건조가 필요한 빨래는 예보를 살펴 일정을 정해 보세요.':weatherReady&&weather.humidity>=75?'실외 습도가 높은 예보예요. 욕실의 남은 물기를 확인해 보세요. 실내 상태는 다를 수 있어요.':'오늘 할 수 있는 일 하나면 충분해요. 완료한 집안일은 다음 주기에 맞춰 다시 찾아옵니다.'}</p><div className="plant-art" aria-hidden="true"><Leaf size={80} strokeWidth={1}/><House size={62} strokeWidth={1}/></div></section>
         <section className="week-preview"><h2>이번 주의 기록</h2><strong>{logs.filter(l=>l.completed_at.slice(0,10)>=daysBefore(today,6)).length}<span>개의 집안일 완료</span></strong><button className="text-button" onClick={()=>setView('생활 리포트')}>생활 리포트<ArrowUpRight size={16}/></button></section></aside></div>}
+        {view==='우리 집 설정'&&<WasteSettings home={home} onChanged={()=>load(true)}/>}
         <footer>CleanCycle <span>우리 집의 좋은 루틴</span><span>함께 만드는 생활 루틴</span></footer>
       </main>
     </div>
@@ -134,6 +136,16 @@ function Dialog({title,onClose,children,error}) {
 function TaskDialog({task,busy,onClose,onSave,error,members}) {
   const [form,setForm]=useState(task);
   const change=(field,value)=>setForm(f=>({...f,[field]:value}));
-  return <Dialog error={error} title={task.id?'집안일 수정':'새로운 집안일'} onClose={onClose}><form onSubmit={e=>{e.preventDefault();if(form.title.trim())onSave({...form,interval_days:Number(form.interval_days)})}}><label>집안일 이름<input autoFocus required maxLength={80} value={form.title} placeholder="예: 욕실 물기 닦기" onChange={e=>change('title',e.target.value)}/></label><div className="form-row"><label>공간<select value={form.room} onChange={e=>change('room',e.target.value)}>{rooms.map(r=><option key={r}>{r}</option>)}</select></label><label>반복 주기 (일)<input type="number" required min="1" max="365" value={form.interval_days} onChange={e=>change('interval_days',e.target.value)}/></label></div><label>다음 예정일<input type="date" required value={form.due_date} onChange={e=>change('due_date',e.target.value)}/></label><label>담당자<select value={form.assigned_to??''} onChange={e=>change('assigned_to',e.target.value?Number(e.target.value):null)}><option value="">미지정</option>{members.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label><label>작업 유형<select value={form.kind} onChange={e=>change('kind',e.target.value)}><option value="general">일반 집안일</option><option value="bathroom">욕실 물기 관리</option><option value="laundry">빨래 · 자연건조</option><option value="outdoor">야외 청소</option></select></label><div className="dialog-actions"><button type="button" onClick={onClose}>취소</button><button className="primary" disabled={busy||!form.title.trim()} type="submit">{busy?'저장 중…':'저장'}</button></div></form></Dialog>;
+  const kinds = {general:'일반 집안일',bathroom:'욕실 물기 관리',laundry:'빨래 · 자연건조',outdoor:'야외 청소',filter:'필터 점검',ventilation:'환기',recycling:'재활용품 배출 준비',food_waste:'음식물쓰레기 배출 준비',trash:'일반쓰레기 배출 준비'};
+  return <Dialog error={error} title={task.id?'집안일 수정':'새로운 집안일'} onClose={onClose}>
+    <form onSubmit={e=>{e.preventDefault();if(form.title.trim())onSave({...form,interval_days:Number(form.interval_days)})}}>
+      <label>집안일 이름<input autoFocus required maxLength={80} value={form.title} placeholder="예: 욕실 물기 닦기" onChange={e=>change('title',e.target.value)}/></label>
+      <div className="form-row"><label>공간<select value={form.room} onChange={e=>change('room',e.target.value)}>{rooms.map(r=><option key={r}>{r}</option>)}</select></label><label>반복 주기 (일)<input type="number" required min="1" max="365" value={form.interval_days} onChange={e=>change('interval_days',e.target.value)}/></label></div>
+      <label>다음 예정일<input type="date" required value={form.due_date} onChange={e=>change('due_date',e.target.value)}/></label>
+      <label>담당자<select value={form.assigned_to??''} onChange={e=>change('assigned_to',e.target.value?Number(e.target.value):null)}><option value="">미지정</option>{members.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
+      <label>작업 유형<select value={form.kind} onChange={e=>change('kind',e.target.value)}>{Object.entries(kinds).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+      <div className="dialog-actions"><button type="button" onClick={onClose}>취소</button><button className="primary" disabled={busy||!form.title.trim()} type="submit">{busy?'저장 중…':'저장'}</button></div>
+    </form>
+  </Dialog>;
 }
 createRoot(document.getElementById('root')).render(<AccountGate>{(account,refresh)=><App key={account.user.id+':'+account.home.id} account={account} onAccountChange={refresh}/>}</AccountGate>);
