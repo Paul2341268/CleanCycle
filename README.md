@@ -83,9 +83,8 @@ cd ..
 ## 테스트
 
 ```powershell
-..\.venv\Scripts\python.exe -m pip install pytest
-cd backend
-..\..\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pip install pytest
+.\.venv\Scripts\python.exe -m pytest backend/tests -q
 ```
 
 브라우저 테스트: `frontend`에서 `npx playwright test`. 테스트 서버가 8766 포트에서 자동 실행됩니다. Chrome이 필요합니다. 별도 임시 DB와 빈 API 키를 사용하므로 실제 사용자 기록을 바꾸지 않습니다.
