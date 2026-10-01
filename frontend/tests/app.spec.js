@@ -1,5 +1,31 @@
 import {test,expect} from '@playwright/test';
 
+test('first-time guide explains scores, postponing and storage without changing records',async({page},testInfo)=>{
+  await page.goto('/');
+  await page.getByRole('button',{name:'서비스 소개·사용 방법',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'서비스 소개와 사용 방법',exact:true})).toBeVisible();
+  await page.getByText('추천 점수가 모두 0인데, 문제가 있나요?',{exact:true}).click();
+  await expect(page.locator('.guide-questions details').first()).toContainText('0점은 안 해도 된다는 뜻이 아니라');
+  await page.getByText('하루 미루기와 그냥 안 하는 것은 뭐가 다른가요?',{exact:true}).click();
+  await expect(page.locator('.guide-questions')).toContainText('예정일이 그대로라 1일 지연');
+  await page.getByText('다른 컴퓨터에서도 내 집안일이 보이나요?',{exact:true}).click();
+  await expect(page.locator('.guide-questions')).toContainText('자동 동기화나 공동 관리는 제공하지 않습니다');
+  for(const width of [1440,390,320]) {
+    await page.setViewportSize({width,height:900});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+    await page.screenshot({path:testInfo.outputPath('guide-'+width+'.png'),fullPage:true});
+  }
+  await page.getByRole('button',{name:'첫 집안일 추가',exact:true}).click();
+  await page.getByLabel('집안일 이름').fill('안내에서 등록');
+  await page.getByRole('button',{name:'저장',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'안내에서 등록',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'사용 안내',exact:true}).click();
+  await page.getByRole('button',{name:'오늘의 집안일',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'안내에서 등록',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'서비스 소개·사용 방법',exact:true})).toHaveCount(0);
+  await expect(page.locator('.metrics')).toContainText('기한 지난 집안일');
+});
+
 async function add(page,name='테스트 청소',kind='general') {
   await page.getByRole('button',{name:'집안일 추가',exact:true}).first().click();
   await page.getByLabel('집안일 이름').fill(name);
