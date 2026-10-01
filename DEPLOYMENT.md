@@ -4,6 +4,10 @@
 
 ## 고정 주소: Render Free
 
+배포 완료 주소: **[https://cleancycle-presentation.onrender.com/](https://cleancycle-presentation.onrender.com/)**
+
+Singapore 리전의 Free 인스턴스로 배포했습니다. 공개 주소에서 기상청·에어코리아 실제 데이터 조회, 집안일 등록·완료·새로고침 후 유지, 리포트와 완료 취소를 확인했습니다. 사용자 PC를 꺼도 접속할 수 있습니다.
+
 1. Render에 로그인하고 New → Web Service를 선택합니다.
 2. Public Git Repository에 `https://github.com/Paul2341268/CleanCycle`을 연결합니다.
 3. Language는 Docker, Branch는 main, Compute는 **Free ($0/month)**로 선택합니다. Root Directory는 비워 둡니다.
@@ -32,4 +36,4 @@ Cloudflare가 임시 HTTPS 주소를 발급합니다. 이 PC와 서버가 켜져
 - 백업을 내보내고 별도 브라우저에서 가져옵니다.
 - 모바일에서도 작업 버튼과 입력창이 잘리는지 확인합니다.
 
-무료 공개 서버는 아직 실제 서비스 생성과 배포 완료를 확인한 뒤에만 제공된 주소를 사용합니다. 저장소 업로드만으로 공개 사이트가 만들어지지는 않습니다.
+저장소 업로드만으로 공개 사이트가 만들어지지는 않습니다. 위 고정 주소는 실제 Render 배포를 완료하고 확인한 주소입니다.
