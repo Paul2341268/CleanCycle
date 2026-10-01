@@ -4,6 +4,7 @@ test('first-time guide explains scores, postponing and storage without changing 
   await page.goto('/');
   await page.getByRole('button',{name:'서비스 소개·사용 방법',exact:true}).click();
   await expect(page.getByRole('heading',{name:'서비스 소개와 사용 방법',exact:true})).toBeVisible();
+  await expect(page.locator('.page-heading').getByRole('button',{name:'집안일 추가',exact:true})).toHaveCount(0);
   await page.getByText('추천 점수가 모두 0인데, 문제가 있나요?',{exact:true}).click();
   await expect(page.locator('.guide-questions details').first()).toContainText('0점은 안 해도 된다는 뜻이 아니라');
   await page.getByText('하루 미루기와 그냥 안 하는 것은 뭐가 다른가요?',{exact:true}).click();
@@ -21,6 +22,7 @@ test('first-time guide explains scores, postponing and storage without changing 
   await expect(page.getByRole('heading',{name:'안내에서 등록',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'사용 안내',exact:true}).click();
   await page.getByRole('button',{name:'오늘의 집안일',exact:true}).click();
+  await expect(page.locator('.page-heading').getByRole('button',{name:'집안일 추가',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'안내에서 등록',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'서비스 소개·사용 방법',exact:true})).toHaveCount(0);
   await expect(page.locator('.metrics')).toContainText('기한 지난 집안일');
