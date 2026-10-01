@@ -5,10 +5,12 @@ import './style.css';
 import {api} from './api';
 import {UndoButton,RecommendationDetails,PostponementReport} from './features';
 import {ServiceGuide} from './guide';
-import {STORAGE_KEY,ROOMS,KINDS,todayKST,shiftDay,emptyState,readState,commit,importState,validateState,metrics,recommend} from './personal';
+import {TaskDialog} from './task-dialog';
+import {PRESETS} from './catalog';
+import {STORAGE_KEY,ROOMS,todayKST,shiftDay,emptyState,readState,commit,importState,validateState,metrics,recommend,isWeekly,scheduleLabel,nextTaskDate} from './personal';
 
 const roomIcons={'욕실':Bath,'주방':CookingPot,'침실':BedDouble,'거실':Sofa,'기타':House};
-const presets=[{title:'욕실 물기 닦기',room:'욕실',interval_days:3,kind:'bathroom'},{title:'침구 세탁',room:'침실',interval_days:14,kind:'laundry'},{title:'냉장고 정리',room:'주방',interval_days:7,kind:'general'},{title:'거실 바닥 청소',room:'거실',interval_days:3,kind:'general'}];
+const presets=PRESETS.filter(p=>['청소기 돌리기','욕실 청소','침구 세탁','냉장고 음식 확인'].includes(p.title));
 function IconButton({label,children,...props}) {return <button className="icon-button" aria-label={label} title={label} {...props}>{children}</button>;}
 const timeLabel=value=>new Date(value).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric'});
 
@@ -76,7 +78,7 @@ function App() {
   const due=tasks.filter(t=>t.due_date<=today);
   const done=logs.filter(l=>l.completed_at.slice(0,10)===today);
   const selected=tasks.filter(t=>(filter==='전체'||t.room===filter)&&(view!=='오늘의 집안일'||t.due_date<=today));
-  const openNew=(preset={})=>{setError('');setModal({title:'',room:'욕실',interval_days:7,due_date:today,kind:'general',...preset});};
+  const openNew=(preset={})=>{setError('');setModal({title:'',room:'집 전체·여러 공간',interval_days:7,due_date:today,kind:'general',repeat_mode:'interval',weekdays:[],...preset});};
   const navigate=name=>{setView(name);setFilter('전체');setError('');};
   return <div className="app">
     <aside className="sidebar">
@@ -98,8 +100,8 @@ function App() {
           {view==='생활 리포트'?<Report logs={logs} today={today} postponements={state.postponements.filter(p=>p.postponed_at.slice(0,10)>=shiftDay(today,-6))} onUndo={log=>{setError('');setConfirm({type:'undo',log});}}/>:<div className="content-grid"><section className="task-section">
             <div className="section-heading"><h2>{view==='오늘의 집안일'?'오늘의 루틴':'공간별 루틴'} <span>{selected.length}</span></h2><span className="sort-label">우선순위 순</span></div>
             <div className="filters" aria-label="공간 필터">{['전체',...ROOMS].map(room=><button key={room} aria-pressed={filter===room} className={filter===room?'selected':''} onClick={()=>setFilter(room)}>{room}</button>)}</div>
-            {selected.length?<div className="task-list">{selected.map(task=>{const Icon=roomIcons[task.room];return <article className="task" key={task.id}><IconButton label={task.title+' 완료'} disabled={!!storageError} onClick={()=>mutate({type:'complete',task},'완료했어요. 다음 일정도 준비했습니다.')}><Circle className="check-circle" size={25}/></IconButton><div className={'room-icon room-'+ROOMS.indexOf(task.room)}><Icon size={21}/></div><div className="task-info"><h3>{task.title}</h3><p>{task.room}<span>·</span>{task.interval_days}일마다<span>·</span>{task.due_date.slice(5).replace('-','/')}</p><button className="reason reason-button" aria-label={task.title+' 추천 근거'} onClick={()=>setDetail(task)}>{task.reasons.join(' · ')}<ArrowUpRight size={12}/></button></div>{task.overdue_days>0&&<span className="tag overdue">{task.overdue_days}일 지연</span>}<div className="task-actions"><IconButton label={task.title+' 하루 미루기'} disabled={!!storageError} onClick={()=>mutate({type:'postpone',task},'다음 날로 일정을 옮겼습니다.')}><Clock3 size={17}/></IconButton><IconButton label={task.title+' 수정'} disabled={!!storageError} onClick={()=>{setError('');setModal(task);}}><Pencil size={16}/></IconButton><IconButton label={task.title+' 삭제'} disabled={!!storageError} onClick={()=>{setError('');setConfirm({type:'delete',task});}}><Trash2 size={16}/></IconButton></div></article>;})}</div>:<div className="empty"><span className="empty-icon"><Check size={28}/></span><h3>{tasks.length?'이 공간에 예정된 일이 없어요':'첫 번째 루틴을 만들어 보세요'}</h3><button className="text-button" disabled={!!storageError} onClick={()=>tasks.length?navigate('모든 집안일'):openNew()}>{tasks.length?'모든 집안일 보기':'집안일 추가'}<ArrowUpRight size={16}/></button></div>}
-            <div className="section-heading preset-heading"><h2>자주 하는 집안일</h2><span className="sort-label">내 생활에 맞춰 조정하세요</span></div><div className="presets">{presets.map(p=>{const Icon=roomIcons[p.room];return <button key={p.title} disabled={!!storageError} onClick={()=>openNew(p)}><Icon size={22}/><div><strong>{p.title}</strong><small>{p.interval_days}일마다</small></div><Plus size={17}/></button>;})}</div>
+            {selected.length?<div className="task-list">{selected.map(task=>{const Icon=roomIcons[task.room]||House;return <article className="task" key={task.id}><IconButton label={task.title+' 완료'} disabled={!!storageError} onClick={()=>mutate({type:'complete',task},'완료했어요. 다음 예정일: '+nextTaskDate(task,today))}><Circle className="check-circle" size={25}/></IconButton><div className={'room-icon room-'+ROOMS.indexOf(task.room)}><Icon size={21}/></div><div className="task-info"><h3>{task.title}</h3><p>{task.room}<span>·</span>{scheduleLabel(task)}<span>·</span>{task.due_date.slice(5).replace('-','/')}{task.time?' '+task.time:''}</p>{task.notes&&<p className="task-note">{task.notes}</p>}<button className="reason reason-button" aria-label={task.title+' 추천 근거'} onClick={()=>setDetail(task)}>{task.reasons.join(' · ')}<ArrowUpRight size={12}/></button></div>{task.overdue_days>0&&<span className="tag overdue">{task.overdue_days}일 지연</span>}<div className="task-actions"><IconButton label={task.title+(isWeekly(task)?(task.kind==='waste'?' 다음 배출일로 미루기':' 다음 지정일로 미루기'):' 하루 미루기')} disabled={!!storageError} onClick={()=>mutate({type:'postpone',task},'다음 예정일: '+nextTaskDate(task,today,true))}><Clock3 size={17}/></IconButton><IconButton label={task.title+' 수정'} disabled={!!storageError} onClick={()=>{setError('');setModal(task);}}><Pencil size={16}/></IconButton><IconButton label={task.title+' 삭제'} disabled={!!storageError} onClick={()=>{setError('');setConfirm({type:'delete',task});}}><Trash2 size={16}/></IconButton></div></article>;})}</div>:<div className="empty"><span className="empty-icon"><Check size={28}/></span><h3>{tasks.length?'이 공간에 예정된 일이 없어요':'첫 번째 루틴을 만들어 보세요'}</h3><button className="text-button" disabled={!!storageError} onClick={()=>tasks.length?navigate('모든 집안일'):openNew()}>{tasks.length?'모든 집안일 보기':'집안일 추가'}<ArrowUpRight size={16}/></button></div>}
+            <div className="section-heading preset-heading"><h2>자주 하는 집안일</h2><span className="sort-label">내 생활에 맞춰 조정하세요</span></div><div className="presets">{presets.map(p=>{const Icon=roomIcons[p.room]||House;return <button key={p.title} disabled={!!storageError} onClick={()=>openNew(p)}><Icon size={22}/><div><strong>{p.title}</strong><small>초기 설정 · {p.interval_days}일마다</small></div><Plus size={17}/></button>;})}</div>
             {done.length>0&&<div className="completed"><h2>오늘 해냈어요 <span>{done.length}</span></h2>{done.map(log=><p key={log.id}><Check size={17}/>{log.title}<span>{log.room}</span><UndoButton log={log} busy={!!storageError} onUndo={log=>{setError('');setConfirm({type:'undo',log});}}/></p>)}</div>}
           </section><aside className="right-column">
             {networkError&&<div className="alert" role="alert">{networkError}</div>}
@@ -110,7 +112,7 @@ function App() {
         <footer>CleanCycle <span>나만의 생활 루틴</span><span>개인용</span></footer>
       </main>
     </div>
-    {modal&&<TaskDialog task={modal} error={error} onClose={()=>setModal(null)} onSave={task=>mutate({type:'save',task},'집안일을 저장했습니다.')}/>}
+    {modal&&<TaskDialog task={modal} tasks={state.tasks} Dialog={Dialog} error={error} onClose={()=>setModal(null)} onSave={task=>mutate({type:'save',task},'집안일을 저장했습니다. 첫 예정일: '+task.due_date)}/>}
     {detail&&<Dialog title="추천 근거" onClose={()=>setDetail(null)}><RecommendationDetails task={detail} weather={weather} air={air}/></Dialog>}
     {confirm&&<Dialog title={confirm.type==='import'?'백업 가져오기':confirm.type==='undo'?'완료 취소':'집안일 삭제'} error={error} onClose={()=>setConfirm(null)}><p>{confirm.type==='import'?`백업의 집안일 ${confirm.value.tasks.length}개로 현재 브라우저 기록을 바꿀까요? 현재 기록이 필요하면 먼저 백업하세요.`:confirm.type==='undo'?`‘${confirm.log.title}’의 완료를 취소하고 이전 예정일로 복구할까요?`:`‘${confirm.task.title}’의 반복 일정을 삭제할까요? 완료 이력은 유지됩니다.`}</p><div className="dialog-actions"><button onClick={()=>setConfirm(null)}>취소</button><button className={confirm.type==='delete'?'danger':'primary'} onClick={()=>confirm.type==='import'?applyBackup():mutate(confirm,confirm.type==='undo'?'완료를 취소했습니다.':'집안일을 삭제했습니다.')}>{confirm.type==='import'?'가져오기':confirm.type==='undo'?'완료 취소':'삭제'}</button></div></Dialog>}
     {notice&&<div className="toast" role="status"><Check size={18}/>{notice}</div>}
@@ -136,10 +138,6 @@ function Report({logs,today,postponements,onUndo}) {
 function Dialog({title,onClose,children,error}) {
   const ref=useRef();useEffect(()=>{ref.current.showModal();},[]);
   return <dialog ref={ref} onCancel={onClose} onClick={e=>{if(e.target===ref.current)onClose();}}><div className="dialog-heading"><h2>{title}</h2><IconButton label="닫기" onClick={onClose}><X size={20}/></IconButton></div>{error&&<div className="alert" role="alert">{error}</div>}{children}</dialog>;
-}
-function TaskDialog({task,error,onClose,onSave}) {
-  const [form,setForm]=useState(task);const change=(field,value)=>setForm(f=>({...f,[field]:value}));
-  return <Dialog title={task.id?'집안일 수정':'새로운 집안일'} error={error} onClose={onClose}><form onSubmit={e=>{e.preventDefault();onSave(form);}}><label>집안일 이름<input autoFocus required maxLength={80} value={form.title} onChange={e=>change('title',e.target.value)}/></label><div className="form-row"><label>공간<select value={form.room} onChange={e=>change('room',e.target.value)}>{ROOMS.map(r=><option key={r}>{r}</option>)}</select></label><label>반복 주기 (일)<input type="number" required min="1" max="365" value={form.interval_days} onChange={e=>change('interval_days',e.target.value)}/></label></div><label>다음 예정일<input type="date" required value={form.due_date} onChange={e=>change('due_date',e.target.value)}/></label><label>작업 유형<select value={form.kind} onChange={e=>change('kind',e.target.value)}>{Object.entries(KINDS).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><div className="dialog-actions"><button type="button" onClick={onClose}>취소</button><button className="primary" type="submit" disabled={!form.title.trim()}>저장</button></div></form></Dialog>;
 }
 
 createRoot(document.getElementById('root')).render(<App/>);

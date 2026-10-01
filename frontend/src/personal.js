@@ -1,6 +1,17 @@
 export const STORAGE_KEY = 'cleancycle-personal-v1';
-export const ROOMS = ['욕실','주방','침실','거실','기타'];
-export const KINDS = {general:'일반 집안일',bathroom:'욕실 물기 관리',laundry:'빨래 · 자연건조',outdoor:'야외 청소',filter:'필터 점검',ventilation:'환기'};
+export const ROOMS = ['집 전체·여러 공간','방·생활 공간','주방','욕실','베란다·다용도실','침실','거실','기타'];
+export const KINDS = {general:'일반 청소·생활 관리',bathroom:'욕실 물기 관리',laundry_indoor:'세탁 · 실내 건조·건조기',laundry:'세탁 · 야외 자연건조',waste:'쓰레기 배출',outdoor:'야외 청소',filter:'필터 점검',ventilation:'환기'};
+export const WEEKDAYS = ['일','월','화','수','목','금','토'];
+export const isWeekly = task => task.repeat_mode==='weekly';
+export const scheduleLabel = task => isWeekly(task)?'매주 '+[...task.weekdays].sort((a,b)=>((a+6)%7)-((b+6)%7)).map(d=>WEEKDAYS[d]).join('·')+'요일':task.interval_days+'일마다';
+export function nextWeekday(day, weekdays, inclusive=false) {
+  for(let offset=inclusive?0:1;offset<=7;offset++) {
+    const date=shiftDay(day,offset);
+    if(weekdays.includes(new Date(date+'T00:00:00Z').getUTCDay())) return date;
+  }
+  throw new Error('반복할 요일을 하나 이상 선택해 주세요.');
+}
+export const nextTaskDate = (task,day,postpone=false) => isWeekly(task)?nextWeekday(postpone&&task.due_date>day?task.due_date:day,task.weekdays):shiftDay(postpone&&task.due_date>day?task.due_date:day,postpone?1:task.interval_days);
 export const REGION_IDS = ['busan','seoul','incheon','daejeon','daegu','gwangju','jeju'];
 export const todayKST = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul'}).format(new Date());
 export const shiftDay = (day,n) => {const d=new Date(day+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10);};
@@ -20,6 +31,12 @@ export function validateState(value) {
   }
   if (!uniqueIds(value.tasks) || !uniqueIds(value.logs) || !uniqueIds(value.postponements)) invalid();
   for (const t of value.tasks) if (!id(t.id)||!text(t.title)||!ROOMS.includes(t.room)||!Object.hasOwn(KINDS,t.kind)||!Number.isInteger(t.interval_days)||t.interval_days<1||t.interval_days>365||!validDay(t.due_date)||!Number.isSafeInteger(t.revision)||t.revision<0) invalid();
+  for (const t of value.tasks) {
+    if(t.repeat_mode!==undefined&&!['interval','weekly'].includes(t.repeat_mode)) invalid();
+    if(isWeekly(t)&&(!Array.isArray(t.weekdays)||!t.weekdays.length||t.weekdays.length>7||new Set(t.weekdays).size!==t.weekdays.length||t.weekdays.some(d=>!Number.isInteger(d)||d<0||d>6)||!t.weekdays.includes(new Date(t.due_date+'T00:00:00Z').getUTCDay()))) invalid();
+    if(t.notes!==undefined&&(typeof t.notes!=='string'||t.notes.length>300)) invalid();
+    if(t.time!==undefined&&(typeof t.time!=='string'||(t.time!==''&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(t.time)))) invalid();
+  }
   for (const l of value.logs) if (!id(l.id)||!id(l.task_id)||!text(l.title)||!ROOMS.includes(l.room)||!stamp(l.completed_at)||!validDay(l.previous_date)||!id(l.completion_revision)||(l.undone_at!=null&&!stamp(l.undone_at))) invalid();
   for (const p of value.postponements) if (!id(p.id)||!id(p.task_id)||!text(p.display_title)||!ROOMS.includes(p.display_room)||!validDay(p.previous_date)||!validDay(p.next_date)||!stamp(p.postponed_at)) invalid();
   for (const d of value.daily) if (!validDay(d.day)||!id(d.task_id)||!ROOMS.includes(d.room)) invalid();
@@ -47,7 +64,7 @@ export function commit(storage, action, day=todayKST(), now=new Date().toISOStri
   capture(state,day);
   if (action.type==='save') {
     const t=action.task;
-    const cleaned={title:t.title.trim(),room:t.room,kind:t.kind,interval_days:Number(t.interval_days),due_date:t.due_date};
+    const cleaned={title:t.title.trim(),room:t.room,kind:t.kind,interval_days:Number(t.interval_days),due_date:t.due_date,repeat_mode:t.repeat_mode||'interval',weekdays:t.repeat_mode==='weekly'?[...t.weekdays]:[],notes:t.notes||'',time:t.time||''};
     if (t.id) {
       const existing=state.tasks.find(r=>r.id===t.id);
       if (!existing || existing.revision!==t.revision) throw new Error('다른 탭에서 변경된 작업입니다. 최신 기록을 확인해 주세요.');
@@ -60,9 +77,9 @@ export function commit(storage, action, day=todayKST(), now=new Date().toISOStri
     else if (action.type==='complete') {
       if (state.logs.some(l=>l.task_id===task.id && !l.undone_at && l.completed_at.slice(0,10)===day)) throw new Error('오늘 이미 완료한 작업입니다.');
       state.logs.push({id:state.nextId++,task_id:task.id,title:task.title,room:task.room,completed_at:kstStamp(day,now),previous_date:task.due_date,completion_revision:task.revision+1,undone_at:null});
-      task.due_date=shiftDay(day,task.interval_days); task.revision++;
+      task.due_date=nextTaskDate(task,day); task.revision++;
     } else {
-      const next=shiftDay(task.due_date>day?task.due_date:day,1);
+      const next=nextTaskDate(task,day,true);
       state.postponements.push({id:state.nextId++,task_id:task.id,display_title:task.title,display_room:task.room,previous_date:task.due_date,next_date:next,postponed_at:kstStamp(day,now)});
       task.due_date=next; task.revision++;
     }

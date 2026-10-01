@@ -1,4 +1,63 @@
 import {test,expect} from '@playwright/test';
+import {todayKST,shiftDay,WEEKDAYS} from '../src/personal.js';
+
+test('catalog, direct entry, duplicate confirmation and responsive registration',async({page},testInfo)=>{
+  await page.goto('/');
+  await page.getByRole('button',{name:'집안일 추가',exact:true}).first().click();
+  await expect(page.getByRole('tab',{name:'목록에서 선택'})).toHaveAttribute('aria-selected','true');
+  await page.getByRole('button',{name:'청소기 돌리기',exact:true}).click();
+  await expect(page.getByLabel('집안일 이름')).toHaveValue('청소기 돌리기');
+  await expect(page.getByLabel('관리 공간')).toHaveValue('집 전체·여러 공간');
+  for(const width of [1440,390,320]) {
+    await page.setViewportSize({width,height:900});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+    expect(await page.locator('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
+    await page.screenshot({path:testInfo.outputPath('registration-'+width+'.png'),fullPage:true});
+  }
+  await page.getByRole('button',{name:'저장',exact:true}).click();
+  await page.getByRole('button',{name:'집안일 추가',exact:true}).first().click();
+  await page.getByRole('button',{name:'청소기 돌리기',exact:true}).click();
+  await expect(page.getByRole('button',{name:'저장',exact:true})).toBeDisabled();
+  await page.getByLabel('같은 이름·공간의 집안일이 있습니다. 별도로 등록합니다.').check();
+  await expect(page.getByRole('button',{name:'저장',exact:true})).toBeEnabled();
+  await page.getByRole('button',{name:'취소',exact:true}).click();
+  await page.getByRole('button',{name:'집안일 추가',exact:true}).first().click();
+  await page.getByRole('tab',{name:'직접 추가'}).click();
+  await expect(page.locator('.catalog')).toHaveCount(0);
+  await page.getByLabel('집안일 이름').fill('커피머신 청소');
+  await page.getByRole('button',{name:'저장',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'커피머신 청소',exact:true})).toBeVisible();
+});
+
+test('waste weekdays preserve schedule through completion, undo, postponement and backup',async({page,browser})=>{
+  const today=todayKST(),weekday=new Date(today+'T00:00:00Z').getUTCDay();
+  await page.goto('/');
+  await page.getByRole('button',{name:'집안일 추가',exact:true}).first().click();
+  await page.getByRole('button',{name:'재활용 배출',exact:true}).click();
+  await expect(page.getByRole('button',{name:'저장',exact:true})).toBeDisabled();
+  await page.locator('.weekday-options').getByLabel(WEEKDAYS[weekday],{exact:true}).check();
+  await page.getByLabel('배출 시간 (선택)').fill('20:00');
+  await page.getByLabel('메모 (선택)').fill('건물 앞 지정 장소');
+  await page.getByRole('button',{name:'저장',exact:true}).click();
+  await expect(page.locator('.task-info')).toContainText('매주 '+WEEKDAYS[weekday]+'요일');
+  await expect(page.locator('.task-info')).toContainText('20:00');
+  await page.getByRole('button',{name:'재활용 배출 완료',exact:true}).click();
+  await page.getByRole('button',{name:'재활용 배출 완료 취소',exact:true}).click();
+  await page.getByRole('button',{name:'완료 취소',exact:true}).click();
+  await page.getByRole('button',{name:'재활용 배출 다음 배출일로 미루기',exact:true}).click();
+  await page.getByRole('button',{name:'모든 집안일',exact:true}).first().click();
+  await expect(page.locator('.task-info')).toContainText(shiftDay(today,7).slice(5).replace('-','/'));
+  await page.getByRole('button',{name:'설정',exact:true}).click();
+  const pending=page.waitForEvent('download');await page.getByRole('button',{name:'백업 내보내기',exact:true}).click();
+  const file=await (await pending).path();const context=await browser.newContext();
+  try {
+    const other=await context.newPage();await other.goto('http://127.0.0.1:8766/');
+    await other.getByRole('button',{name:'설정',exact:true}).click();await other.getByLabel('백업 파일').setInputFiles(file);
+    await other.getByRole('button',{name:'가져오기',exact:true}).click();await other.getByRole('button',{name:'모든 집안일',exact:true}).click();
+    await expect(other.locator('.task-info')).toContainText('매주 '+WEEKDAYS[weekday]+'요일');
+    await expect(other.locator('.task-info')).toContainText('건물 앞 지정 장소');
+  } finally {await context.close();}
+});
 
 test('first-time guide explains scores, postponing and storage without changing records',async({page},testInfo)=>{
   await page.goto('/');
@@ -31,7 +90,7 @@ test('first-time guide explains scores, postponing and storage without changing 
 async function add(page,name='테스트 청소',kind='general') {
   await page.getByRole('button',{name:'집안일 추가',exact:true}).first().click();
   await page.getByLabel('집안일 이름').fill(name);
-  await page.getByLabel('작업 유형').selectOption(kind);
+  await page.getByLabel('집안일 종류').selectOption(kind);
   await page.getByRole('button',{name:'저장',exact:true}).click();
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
 }
